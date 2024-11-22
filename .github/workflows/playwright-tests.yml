@@ -47,20 +47,16 @@ jobs:
         source venv/bin/activate
         case "${{ github.event.inputs.deployment_target }}" in
           smoke)
-            pytest --maxfail=1 --disable-warnings -v -m smoke --alluredir=allure-results
+            pytest -v -m smoke --alluredir=allure-results
             ;;
           regression)
-            pytest --maxfail=1 --disable-warnings -v -m regression --alluredir=allure-results
+            pytest -v -m regression --alluredir=allure-results
             ;;
           extended)
-            pytest --maxfail=1 --disable-warnings -v -m extended --alluredir=allure-results
+            pytest -v -m extended --alluredir=allure-results
             ;;
           all)
-            pytest --maxfail=1 --disable-warnings -v --alluredir=allure-results
-            ;;
-          *)
-            echo "Invalid option provided."              
-            exit 1
+            pytest -v --alluredir=allure-results
             ;;
         esac
         
