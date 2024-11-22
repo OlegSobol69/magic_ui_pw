@@ -1,0 +1,117 @@
+name: Playwright Autotests
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_target:
+        description: Choose tests set
+        required: true
+        type: choice
+        default: smoke
+        options:
+          - smoke
+          - regression
+          - extended
+          - all
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    name: Run Playwright Tests
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Install Playwright Browsers
+        run: |
+          source venv/bin/activate
+          playwright install
+
+      - name: Download previous Allure results
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results
+          path: previous-allure-results
+        continue-on-error: true
+
+      - name: Prepare Allure results directory
+        run: |
+          rm -rf allure-results
+          mkdir -p allure-results
+          cp -r previous-allure-results/* allure-results || true  # Копируем предыдущие результаты, если они есть
+
+      - name: Run Playwright Tests
+        run: |
+          source venv/bin/activate
+          case "${{ github.event.inputs.deployment_target }}" in
+            smoke)
+              pytest --maxfail=1 --disable-warnings -v -m smoke --alluredir=allure-results
+              ;;
+            regression)
+              pytest --maxfail=1 --disable-warnings -v -m regression --alluredir=allure-results
+              ;;
+            extended)
+              pytest --maxfail=1 --disable-warnings -v -m extended --alluredir=allure-results
+              ;;
+            all)
+              pytest --maxfail=1 --disable-warnings -v --alluredir=allure-results
+              ;;
+            *)
+              echo "Invalid option provided."
+              exit 1
+              ;;
+          esac
+
+      - name: Save Allure results
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: allure-results
+          retention-days: 3
+
+      - name: Install Allure
+        run: |
+          sudo wget https://github.com/allure-framework/allure2/releases/download/2.24.1/allure-2.24.1.tgz
+          sudo tar -zxvf allure-2.24.1.tgz -C /opt/
+          sudo ln -s /opt/allure-2.24.1/bin/allure /usr/bin/allure
+
+      - name: Generate Allure Report
+        run: allure generate -c allure-results -o _site
+
+      - name: Save Allure Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: _site
+          path: _site
+          retention-days: 3
+
+  publish-report:
+    name: Publish Allure Report
+    runs-on: ubuntu-latest
+    needs: run-tests
+    steps:
+      - name: Download Allure Report Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: _site
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
+        with:
+          path: _site
